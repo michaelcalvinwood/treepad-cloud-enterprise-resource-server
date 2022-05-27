@@ -7,5 +7,12 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Michael Wood",
-  "license": "SEE LICENSE IN license.md"
+  "license": "SEE LICENSE IN license.md",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.1",
+    "express": "^4.18.1",
+    "https": "^1.0.0",
+    "mysql": "^2.18.1"
+  }
 }
