@@ -9,10 +9,13 @@
   "author": "Michael Wood",
   "license": "SEE LICENSE IN license.md",
   "dependencies": {
+    "bcrypt": "^5.0.1",
     "cors": "^2.8.5",
     "dotenv": "^16.0.1",
     "express": "^4.18.1",
     "https": "^1.0.0",
-    "mysql": "^2.18.1"
+    "jsonwebtoken": "^8.5.1",
+    "mysql": "^2.18.1",
+    "uuidv4": "^6.2.13"
   }
 }

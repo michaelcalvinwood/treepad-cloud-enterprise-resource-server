@@ -4,38 +4,38 @@ const app = express();
 const https = require('https');
 const fs = require('fs');
 const mysql = require('mysql');
-// const db = require('./database/database-interface.js');
-// const authenticationRoutes = require('./routes/authentication.js');
+const db = require('./database/database-interface.js');
+const routes = require('./routes/routes.js');
 
 require('dotenv').config();
 
-// pooled mysql connection
-// const dbPoolInfo = {
-//   host: process.env.DB_HOST,
-//   port: Number(process.env.DB_PORT),
-//   user: process.env.DB_USER,
-//   password: process.env.DB_PASSWORD,
-//   database: process.env.DB_DATABASE,
-//   connectionLimit: Number(process.env.DB_CONNECTION_LIMIT),
-//   queueLimit: Number(process.env.DB_QUEUE_LIMIT),
-//   charset: 'utf8'
-// }
+//pooled mysql connection
 
-// exports.dbPool = mysql.createPool(dbPoolInfo);
-// db.createTables();
+const dbPoolInfo = {
+  host: process.env.DB_HOST,
+  port: Number(process.env.DB_PORT),
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_DATABASE,
+  connectionLimit: Number(process.env.DB_CONNECTION_LIMIT),
+  queueLimit: Number(process.env.DB_QUEUE_LIMIT),
+  charset: 'utf8'
+}
+
+exports.dbPool = mysql.createPool(dbPoolInfo);
+db.createTables();
 
 app.use((req, res, next) => {
   console.log(req.url);
   next();
  });
  
- 
 
 app.use(express.static('public'));
 app.use(express.json({limit: '200mb'})); 
 app.use(cors());
 
-// app.use('/authentication', authenticationRoutes);
+app.use('/', routes);
 
 const httpsServer = https.createServer({
   key: fs.readFileSync(`/etc/letsencrypt/live/${process.env.DOMAIN}/privkey.pem`),
