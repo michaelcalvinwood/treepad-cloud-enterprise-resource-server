@@ -12,4 +12,7 @@ router.route('/trees')
     .get(db.getTrees)
     .post(db.createTree)
 
+router.route('/tree/:treeId')
+    .delete(db.deleteTree)
+
 module.exports = router;

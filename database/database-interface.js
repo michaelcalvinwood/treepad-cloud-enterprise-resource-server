@@ -23,19 +23,37 @@ exports.createTables = () => {
     });
 }
 
+
+exports.getTrees = (req, res) => {    
+    const {userId} = req.token;
+
+    if (!userId) return res.status(400).send('token missing userId');
+
+    let sql = `SELECT tree_id, icon, color, tree_name, tree_desc, owner_name, updated_ts, type FROM trees WHERE user_id = '${userId}'`;
+
+    server.dbPool.query(sql, (err, dbResult, fields) => {
+        if(err) {
+            // TODO: Check for duplicate entry and alert user if that's the case
+            console.error('Db error: ', err);
+            return res.status(400).send('Database Error. Please try again later.')
+        }
+
+        // console.log(pretty(dbResult));
+        
+        res.status(200).send(dbResult);
+    });
+}
+
 exports.createTree = (req, res) => {
-    const {token, icon, treeName, treeDesc} = req.body;
+    const {icon, treeName, treeDesc} = req.body;
 
     if (
-        !token ||
         !icon ||
         !treeName ||
         treeDesc === undefined
     ) return res.status(401).send('missing data');
 
-    if (!jwt.verify(token, process.env.SECRET_KEY)) return res.status(403).json({ error: "Not Authorized." });
-    
-    const {userId, userName} = jwt.decode(token);
+    const {userId, userName} = req.token;
     const treeId = `${userId}--${uuidv4()}`;
 
     if (Number(userId) <= 0) return res.status(403).send('forbidden');
@@ -45,80 +63,111 @@ exports.createTree = (req, res) => {
 
     const ts = Date.now();
 
-    let sql = `INSERT INTO trees (user_id, tree_id, icon, tree_name, owner_name, updated_ts) VALUES ('${Number(userId)}', '${treeId}', '${icon}', '${treeName}', '${userName}', '${ts}')`
+    let sql = `INSERT INTO trees (user_id, tree_id, icon, tree_name, tree_desc, owner_name, updated_ts) VALUES ('${Number(userId)}', '${treeId}', '${icon}', '${treeName}', '${treeDesc}', '${userName}', '${ts}')`
 
     server.dbPool.query(sql, (err, dbResult, fields) => {
         if(err) {
             // TODO: Check for duplicate entry and alert user if that's the case
             console.error(pretty(err));
-            const error = JSON.parse(err);
-            if (err.errno === 1062) return res.status(401).send(`Error: Tree ${treeName} alread exists.`)
-            return res.status(400).send('Database Error. Please try again later.')
+            if (err.errno === 1062) return res.status(401).send(`${treeName} alread exists.`)
+            return res.status(400).send('Database Error 1. Please try again later.')
         }
 
         let sql = `SELECT tree_order FROM updates WHERE user_id=${userId}`;
 
         server.dbPool.query(sql, (err, dbResult, fields) => { 
-            if (err || !dbResult || !dbResult[0]) {
-                console.error(pretty(err));
-                return res.status(400).send('Database Error. Please try again later.');                
+            if (err || !dbResult) {
+                console.error('db err', pretty(err));
+                console.error('db result', dbResult);
+                return res.status(400).send('Database Error 2. Please try again later.');                
             }
 
-            console.log('dbResult', pretty(dbResult));
-            
-            if (!dbResult[0].tree_order) return res.status(400).send('Database Error. Please try again later.'); 
-            
-            const treeOrder = JSON.parse(dbResult[0].tree_order);
+            if (dbResult.length === 0) {
+                sql = `INSERT INTO updates (user_id, trees_ts, tree_order) VALUES (${userId}, ${ts}, '["${treeId}"]')`;
+            } else {
+                console.log('dbResult', dbResult);
+                console.log('dbResult[0]', dbResult[0], typeof dbResult[0]);
+                let treeOrder = JSON.parse(dbResult[0].tree_order);
+                treeOrder.unshift(treeId);
+                sql = `UPDATE updates SET tree_order='${JSON.stringify(treeOrder)}', trees_ts=${ts} WHERE user_id = ${userId}`;
+            }
 
-            treeOrder.unshift(treeId);
+            server.dbPool.query(sql, (err, dbResult, fields) => { 
+                if (err) {
+                    console.error(pretty(err));
+                    return res.status(400).send('Database Error 3. Please try again later.');
+                }
 
-            const ts = Date.now();
-
-            res.status(200).send('success');
-
+                return this.getTrees(req, res);
+            });
             
         })
-
         
     });
 }
 
-// [
-//     {
-//         "tree_id": "33--dfa0c4c4-1632-48f5-8952-b4199cda4d4f",
-//         "icon": "/svg/light/rings-wedding.svg",
-//         "color": "#000000",
-//         "tree_name": "Wedding",
-//         "owner_name": "admin",
-//         "branch_order": "",
-//         "updated_ts": 1653694481634,
-//         "type": "private"
-//     }
-// ]
+exports.updateTree = (req, res) => {
+    const {icon, treeName, treeDesc, treeId} = req.body;
 
-exports.getTrees = (req, res) => {
-    const {token} = req.query;
+    if (
+        !icon ||
+        !treeName ||
+        !treeId ||
+        treeDesc === undefined
+    ) return res.status(401).send('missing data');
 
-    if (!token) return res.status(401).send('missing token');
-
-    if (!jwt.verify(token, process.env.SECRET_KEY)) return res.status(403).json({ error: "Not Authorized." });
+    const {userId, userName} = req.token;
     
-    const {userId} = jwt.decode(token);
+    if (Number(userId) <= 0) return res.status(403).send('forbidden');
+    
+    console.log(userId, userName);
+    console.log(icon, treeName);
 
-    if (!userId) return res.status(400).send('token missing userId');
+    const ts = Date.now();
 
-    let sql = `SELECT tree_id, icon, color, tree_name, owner_name, updated_ts, type FROM trees WHERE user_id = '${userId}'`;
-
+    let sql = `UPDATE trees SET icon = '${icon}', tree_name = '${treeName}', tree_desc = '${treeDesc}', ts = ${ts} WHERE tree_id = '${treeId}'`;
+    
     server.dbPool.query(sql, (err, dbResult, fields) => {
         if(err) {
             // TODO: Check for duplicate entry and alert user if that's the case
-            console.error('Db error: ', err);
-            return res.status(400).send('Database Error. Please try again later.')
+            console.error(pretty(err));
+            if (err.errno === 1062) return res.status(401).send(`${treeName} alread exists.`)
+            return res.status(400).send('Database Error 1. Please try again later.')
         }
 
-        console.log(pretty(dbResult));
-        
-        res.status(200).send(dbResult);
+        return this.getTrees(req, res);
     });
 }
 
+exports.deleteTree = ((req, res) => {
+    console.log(req.params);
+
+    if (!req.params.treeId) return res.status(400).send('missing treeId');
+
+    const { treeId } = req.params;
+    let {userId, userName} = req.token;
+
+    console.log('type of userId', typeof userId)
+
+    let sql = `SELECT user_id FROM trees WHERE tree_id='${treeId}'`;
+
+    server.dbPool.query(sql, (err, dbResult, fields) => { 
+        if (err) return res.status(400).send('Database Error 1: Please try again later.');
+        
+        let testUserId = dbResult[0].user_id;
+
+        if (testUserId !== userId) return res.status(401).send('unauthorized');
+
+        sql = `DELETE FROM trees WHERE tree_id='${treeId}'`;
+
+        //TODO: Make sure branches container foreign key
+
+        server.dbPool.query(sql, (err, dbResult, fields) => {
+            if (err) return res.status(400).send('Database Error 2: Please try again later.');
+        
+            res.status(200).send('ok');
+         });
+    });
+
+    
+});

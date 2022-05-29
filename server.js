@@ -6,6 +6,7 @@ const fs = require('fs');
 const mysql = require('mysql');
 const db = require('./database/database-interface.js');
 const routes = require('./routes/routes.js');
+const jwt = require('jsonwebtoken');
 
 require('dotenv').config();
 
@@ -25,15 +26,35 @@ const dbPoolInfo = {
 exports.dbPool = mysql.createPool(dbPoolInfo);
 db.createTables();
 
-app.use((req, res, next) => {
-  console.log(req.url);
-  next();
- });
- 
-
 app.use(express.static('public'));
 app.use(express.json({limit: '200mb'})); 
 app.use(cors());
+
+// all resource routes require an authenticated bearer token
+// the contents of the bearer token are added to the req object
+
+app.use((req, res, next) => {
+  console.log(req.url);
+  const token = getToken(req);
+
+  if (!token) return res.status(403).json({ error: "No token. Unauthorized." });
+  
+  const verified = jwt.verify(token, process.env.SECRET_KEY);
+
+  if (!verified ) return res.status(401).json({ error: "Not Authorized." });
+
+  req.token = jwt.decode(token);
+  next();
+
+ });
+ 
+function getToken(req) {
+  if (!req.headers.authorization) return false;
+
+  return req.headers.authorization.split(" ")[1];
+}
+
+
 
 app.use('/', routes);
 
