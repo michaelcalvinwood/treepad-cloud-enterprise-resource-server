@@ -11,8 +11,10 @@ router.route('/hello-world')
 router.route('/trees')
     .get(db.getTrees)
     .post(db.createTree)
+    
 
 router.route('/tree/:treeId')
     .delete(db.deleteTree)
+    .put(db.updateTree)
 
 module.exports = router;

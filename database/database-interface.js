@@ -107,12 +107,13 @@ exports.createTree = (req, res) => {
 }
 
 exports.updateTree = (req, res) => {
-    const {icon, treeName, treeDesc, treeId} = req.body;
+    const { treeId } = req.params;
+
+    const {icon, treeName, treeDesc} = req.body;
 
     if (
         !icon ||
         !treeName ||
-        !treeId ||
         treeDesc === undefined
     ) return res.status(401).send('missing data');
 
@@ -125,7 +126,7 @@ exports.updateTree = (req, res) => {
 
     const ts = Date.now();
 
-    let sql = `UPDATE trees SET icon = '${icon}', tree_name = '${treeName}', tree_desc = '${treeDesc}', ts = ${ts} WHERE tree_id = '${treeId}'`;
+    let sql = `UPDATE trees SET icon = '${icon}', tree_name = '${treeName}', tree_desc = '${treeDesc}', updated_ts = ${ts} WHERE tree_id = '${treeId}'`;
     
     server.dbPool.query(sql, (err, dbResult, fields) => {
         if(err) {
