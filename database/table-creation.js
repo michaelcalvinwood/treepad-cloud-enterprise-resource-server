@@ -17,6 +17,7 @@ exports.createTreesTable = `CREATE TABLE IF NOT EXISTS trees (
     branch_order text DEFAULT '[]',
     updated_ts BIGINT NOT NULL DEFAULT 0,
     type VARCHAR(128) DEFAULT 'private',
+    tags VARCHAR(1024) NOT NULL DEFAULT '[]',
     PRIMARY KEY(tree_id),
     INDEX(user_id),
     UNIQUE(owner_name, tree_name)

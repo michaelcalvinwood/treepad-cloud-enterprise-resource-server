@@ -10,6 +10,10 @@ require('dotenv').config();
 
 const pretty = str => JSON.stringify(str, null, 4);
 
+const esc = val => {
+    return server.dbPool.escape(val, true);
+}
+
 exports.createTables = () => {
  
     server.dbPool.query(tc.createUpdatesTable, (err, res, fields) => {
@@ -29,7 +33,7 @@ exports.getTrees = (req, res) => {
 
     if (!userId) return res.status(400).send('token missing userId');
 
-    let sql = `SELECT tree_id, icon, color, tree_name, tree_desc, owner_name, updated_ts, type FROM trees WHERE user_id = '${userId}'`;
+    let sql = `SELECT tree_id, icon, color, tree_name, tree_desc, owner_name, updated_ts, type FROM trees WHERE user_id = ${userId}`;
 
     server.dbPool.query(sql, (err, dbResult, fields) => {
         if(err) {
@@ -54,7 +58,7 @@ exports.createTree = (req, res) => {
     ) return res.status(401).send('missing data');
 
     const {userId, userName} = req.token;
-    const treeId = `${userId}--${uuidv4()}`;
+    const treeId = `T_${userId}_${uuidv4()}`;
 
     if (Number(userId) <= 0) return res.status(403).send('forbidden');
     
@@ -63,7 +67,7 @@ exports.createTree = (req, res) => {
 
     const ts = Date.now();
 
-    let sql = `INSERT INTO trees (user_id, tree_id, icon, tree_name, tree_desc, owner_name, updated_ts) VALUES ('${Number(userId)}', '${treeId}', '${icon}', '${treeName}', '${treeDesc}', '${userName}', '${ts}')`
+    let sql = `INSERT INTO trees (user_id, tree_id, icon, tree_name, tree_desc, owner_name, updated_ts) VALUES ('${Number(userId)}', '${treeId}', ${esc(icon)}, ${esc(treeName)}, ${esc(treeDesc)}, ${esc(userName)}, '${ts}')`
 
     server.dbPool.query(sql, (err, dbResult, fields) => {
         if(err) {
@@ -83,7 +87,7 @@ exports.createTree = (req, res) => {
             }
 
             if (dbResult.length === 0) {
-                sql = `INSERT INTO updates (user_id, trees_ts, tree_order) VALUES (${userId}, ${ts}, '["${treeId}"]')`;
+                sql = `INSERT INTO updates (user_id, trees_ts, tree_order) VALUES (${userId}, ${ts}, '[${esc(treeId)}]')`;
             } else {
                 console.log('dbResult', dbResult);
                 console.log('dbResult[0]', dbResult[0], typeof dbResult[0]);
@@ -126,7 +130,7 @@ exports.updateTree = (req, res) => {
 
     const ts = Date.now();
 
-    let sql = `UPDATE trees SET icon = '${icon}', tree_name = '${treeName}', tree_desc = '${treeDesc}', updated_ts = ${ts} WHERE tree_id = '${treeId}'`;
+    let sql = `UPDATE trees SET icon = ${esc(icon)}, tree_name = ${esc(treeName)}, tree_desc = ${esc(treeDesc)}, updated_ts = ${ts} WHERE tree_id = ${esc(treeId)}`;
     
     server.dbPool.query(sql, (err, dbResult, fields) => {
         if(err) {
@@ -150,7 +154,7 @@ exports.deleteTree = ((req, res) => {
 
     console.log('type of userId', typeof userId)
 
-    let sql = `SELECT user_id FROM trees WHERE tree_id='${treeId}'`;
+    let sql = `SELECT user_id FROM trees WHERE tree_id=${esc(treeId)}`;
 
     server.dbPool.query(sql, (err, dbResult, fields) => { 
         if (err) return res.status(400).send('Database Error 1: Please try again later.');
@@ -159,7 +163,7 @@ exports.deleteTree = ((req, res) => {
 
         if (testUserId !== userId) return res.status(401).send('unauthorized');
 
-        sql = `DELETE FROM trees WHERE tree_id='${treeId}'`;
+        sql = `DELETE FROM trees WHERE tree_id=${esc(treeId)}`;
 
         //TODO: Make sure branches container foreign key
 
