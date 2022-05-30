@@ -25,6 +25,11 @@ exports.createTables = () => {
         if(err) console.error('Db error: ', err);
         else console.log('Created Table: trees');
     });
+
+    server.dbPool.query(tc.createBranchesTable, (err, res, fields) => {
+        if(err) console.error('Db error: ', err);
+        else console.log('Created Table: branches');
+    });
 }
 
 
@@ -48,6 +53,89 @@ exports.getTrees = (req, res) => {
     });
 }
 
+const insertTree = (userId, treeId, icon, treeName, treeDesc, userName, branchId, res) => {
+    const ts = Date.now();
+
+    let sql = `INSERT INTO trees (user_id, tree_id, icon, tree_name, tree_desc, owner_name, branch_order, updated_ts) VALUES ('${Number(userId)}', '${treeId}', ${esc(icon)}, ${esc(treeName)}, ${esc(treeDesc)}, ${esc(userName)}, '["${branchId}_0o"]', '${ts}')`;
+
+    return new Promise((resolve, reject) => {
+        server.dbPool.query(sql, (err, dbResult, fields) => {
+            if(err) {
+                console.error(pretty(err));
+                if (err.errno === 1062) res.status(401).send(`${treeName} alread exists.`);
+                else res.status(400).send('Database Error 1. Please try again later.');
+                reject(err);
+            }
+            else {
+                resolve(dbResult);
+            }
+        })
+    })
+}
+
+const getCurrentTreeOrder = (userId, res) => {
+    let sql = `SELECT tree_order FROM updates WHERE user_id=${userId}`;
+
+    return new Promise((resolve, reject) => {
+       
+        server.dbPool.query(sql, (err, dbResult, fields) => { 
+            if (err || !dbResult) {
+                console.error('db err', pretty(err));
+                console.error('db result', dbResult);
+                res.status(400).send('Database Error 2. Please try again later.');   
+                reject(err);             
+            }    
+            else {
+                resolve(dbResult);
+            }
+        })
+    })
+}
+
+const updateTreeOrder = (dbResult, userId, ts, treeId, res) => {
+    if (dbResult.length === 0) {
+        sql = `INSERT INTO updates (user_id, trees_ts, tree_order) VALUES (${userId}, ${ts}, '[${esc(treeId)}]')`;
+    } else {
+        console.log('dbResult', dbResult);
+        console.log('dbResult[0]', dbResult[0], typeof dbResult[0]);
+        
+        let treeOrder = JSON.parse(dbResult[0].tree_order);
+        treeOrder.unshift(treeId);
+        sql = `UPDATE updates SET tree_order='${JSON.stringify(treeOrder)}', trees_ts=${ts} WHERE user_id = ${userId}`;
+    }
+
+    return new Promise((resolve, reject) => {
+        server.dbPool.query(sql, (err, dbResult, fields) => { 
+            if (err) {
+                console.error(pretty(err));
+                res.status(400).send('Database Error 3. Please try again later.');
+                reject(err)
+            }
+            else {
+                resolve(dbResult);
+            }
+        })
+    })
+}
+
+const addNewBranch = (branchId, treeId, ts, res) => {
+ 
+    let sql = `INSERT INTO branches (branch_id, tree_id, updated_ts) VALUES (${esc(branchId)}, '${treeId}', '${ts}')`;
+
+    return new Promise((resolve, reject) => {
+        server.dbPool.query(sql, (err, dbResult, fields) => {
+            if(err) {
+                console.error(pretty(err));
+                res.status(400).send('Database Error 5. Please try again later.');
+                reject(err);
+            }
+            else {
+                resolve(dbResult);
+            }
+        })
+    })
+}
+
 exports.createTree = (req, res) => {
     const {icon, treeName, treeDesc} = req.body;
 
@@ -59,6 +147,7 @@ exports.createTree = (req, res) => {
 
     const {userId, userName} = req.token;
     const treeId = `T_${userId}_${uuidv4()}`;
+    const branchId = `B_${userId}_${uuidv4()}`;
 
     if (Number(userId) <= 0) return res.status(403).send('forbidden');
     
@@ -67,11 +156,48 @@ exports.createTree = (req, res) => {
 
     const ts = Date.now();
 
-    let sql = `INSERT INTO trees (user_id, tree_id, icon, tree_name, tree_desc, owner_name, updated_ts) VALUES ('${Number(userId)}', '${treeId}', ${esc(icon)}, ${esc(treeName)}, ${esc(treeDesc)}, ${esc(userName)}, '${ts}')`
+    insertTree(userId, treeId, icon, treeName, treeDesc, userName, branchId, res)
+    .then(response => {
+        return getCurrentTreeOrder(userId, res);
+    })
+    .then(response => {
+        return updateTreeOrder(response, userId, ts, treeId, res);
+    })
+    .then(response => {
+        return addNewBranch(branchId, treeId, ts, res);
+    })
+    .then(response => {
+        return this.getTrees(req, res);
+    }) 
+    .catch(err => {
+        console.log("caught error", err);
+    }) 
+}
+
+exports.createTreeOrig = (req, res) => {
+    const {icon, treeName, treeDesc} = req.body;
+
+    if (
+        !icon ||
+        !treeName ||
+        treeDesc === undefined
+    ) return res.status(401).send('missing data');
+
+    const {userId, userName} = req.token;
+    const treeId = `T_${userId}_${uuidv4()}`;
+    const branchId = `B_${userId}_${uuidv4()}`;
+
+    if (Number(userId) <= 0) return res.status(403).send('forbidden');
+    
+    console.log(userId, userName);
+    console.log(icon, treeName);
+
+    const ts = Date.now();
+
+    let sql = `INSERT INTO trees (user_id, tree_id, icon, tree_name, tree_desc, owner_name, branch_order, updated_ts) VALUES ('${Number(userId)}', '${treeId}', ${esc(icon)}, ${esc(treeName)}, ${esc(treeDesc)}, ${esc(userName)}, ${"'"}, ${ts})`
 
     server.dbPool.query(sql, (err, dbResult, fields) => {
         if(err) {
-            // TODO: Check for duplicate entry and alert user if that's the case
             console.error(pretty(err));
             if (err.errno === 1062) return res.status(401).send(`${treeName} alread exists.`)
             return res.status(400).send('Database Error 1. Please try again later.')
@@ -96,7 +222,8 @@ exports.createTree = (req, res) => {
                 sql = `UPDATE updates SET tree_order='${JSON.stringify(treeOrder)}', trees_ts=${ts} WHERE user_id = ${userId}`;
             }
 
-            server.dbPool.query(sql, (err, dbResult, fields) => { 
+                // add new tree to tree order
+                server.dbPool.query(sql, (err, dbResult, fields) => { 
                 if (err) {
                     console.error(pretty(err));
                     return res.status(400).send('Database Error 3. Please try again later.');
@@ -109,6 +236,7 @@ exports.createTree = (req, res) => {
         
     });
 }
+
 
 exports.updateTree = (req, res) => {
     const { treeId } = req.params;
