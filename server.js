@@ -8,6 +8,7 @@ const db = require('./database/database-interface.js');
 const routes = require('./routes/routes.js');
 const jwt = require('jsonwebtoken');
 const socketio = require('socket.io');
+const sockUtils = require('./utils/resourceSocketUtils');
 
 require('dotenv').config();
 
@@ -28,11 +29,7 @@ const io = socketio(connection, {
   }
 });
 
-io.on('connection', socket => {
-  console.log(`${socket.id} has connected`);
-
-  io.to(socket.id).emit('hello', 'hello there');
-})
+io.on('connection', socket => sockUtils.socketCommunication(io, socket));
 
 //pooled mysql connection
 
