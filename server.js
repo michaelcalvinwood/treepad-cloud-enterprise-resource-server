@@ -7,8 +7,32 @@ const mysql = require('mysql');
 const db = require('./database/database-interface.js');
 const routes = require('./routes/routes.js');
 const jwt = require('jsonwebtoken');
+const socketio = require('socket.io');
 
 require('dotenv').config();
+
+const httpsServer = https.createServer({
+  key: fs.readFileSync(`/etc/letsencrypt/live/${process.env.DOMAIN}/privkey.pem`),
+  cert: fs.readFileSync(`/etc/letsencrypt/live/${process.env.DOMAIN}/fullchain.pem`),
+}, app);
+
+const connection = httpsServer.listen(process.env.PORT, () => {
+  console.log(`HTTPS Server running on port ${process.env.PORT}`);
+ });
+ 
+
+const io = socketio(connection, {
+  cors: {
+      origin: '*',
+      methods: ['GET', 'POST']
+  }
+});
+
+io.on('connection', socket => {
+  console.log(`${socket.id} has connected`);
+
+  io.to(socket.id).emit('hello', 'hello there');
+})
 
 //pooled mysql connection
 
@@ -54,19 +78,8 @@ function getToken(req) {
   return req.headers.authorization.split(" ")[1];
 }
 
-
-
 app.use('/', routes);
 
-const httpsServer = https.createServer({
-  key: fs.readFileSync(`/etc/letsencrypt/live/${process.env.DOMAIN}/privkey.pem`),
-  cert: fs.readFileSync(`/etc/letsencrypt/live/${process.env.DOMAIN}/fullchain.pem`),
-}, app);
-
-
-httpsServer.listen(process.env.PORT, () => {
- console.log(`HTTPS Server running on port ${process.env.PORT}`);
-});
 
 
 
