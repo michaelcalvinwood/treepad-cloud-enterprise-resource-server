@@ -10,7 +10,7 @@ require('dotenv').config();
 
 const pretty = str => JSON.stringify(str, null, 4);
 
-const esc = val => {
+exports.esc = val => {
     return server.dbPool.escape(val, true);
 }
 
@@ -51,6 +51,15 @@ exports.getTrees = (req, res) => {
         
         res.status(200).send(dbResult);
     });
+}
+
+exports.pquery = sql => {
+    return new Promise((resolve, reject) => {
+        server.dbPool.query(sql, (err, dbResult, fields) => {
+            if(err) reject(err);
+            else resolve(dbResult);
+        })
+    })
 }
 
 const insertTree = (userId, treeId, icon, treeName, treeDesc, userName, branchId, res) => {
