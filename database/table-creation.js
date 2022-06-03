@@ -26,6 +26,7 @@ exports.createTreesTable = `CREATE TABLE IF NOT EXISTS trees (
 exports.createBranchesTable = `CREATE TABLE IF NOT EXISTS branches (
     branch_id VARCHAR(128) NOT NULL,
     tree_id VARCHAR(128) NOT NULL,
+    immutable_parent_id VARCHAR(128) NOT NULL DEFAULT '',
     branch_name VARCHAR(1024) NOT NULL DEFAULT '',
     module VARCHAR(512),
     updated_ts BIGINT NOT NULL DEFAULT 0,

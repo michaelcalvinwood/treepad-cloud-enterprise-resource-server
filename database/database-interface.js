@@ -10,7 +10,7 @@ require('dotenv').config();
 
 const pretty = str => JSON.stringify(str, null, 4);
 
-exports.esc = val => {
+const esc = val => {
     return server.dbPool.escape(val, true);
 }
 
