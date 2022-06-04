@@ -66,7 +66,7 @@ const getResourceParts = (resourceId, io, socket) => {
 
     const resourceIdParts = resourceId.split('_');
 
-    if (resourceIdParts.length < 3) {
+    if (resourceIdParts.length != 3) {
         sendToastMessage(io, socket, `Invalid resource: ${resourceId}`);
         return false;
     }
