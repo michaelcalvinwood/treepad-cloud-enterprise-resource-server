@@ -9,6 +9,22 @@ const routes = require('./routes/routes.js');
 const jwt = require('jsonwebtoken');
 const socketio = require('socket.io');
 const sockUtils = require('./utils/resourceSocketUtils');
+const redisPackage = require('redis');
+const redis = redisPackage.createClient();
+
+redis.on('connect', function() {
+
+ console.log('Redis Connected!');
+
+ redis.set('test', 'I am test');
+ redis.get('test')
+ .then(result => {
+   console.log(`test: ${result}`);
+ }) 
+
+});
+
+redis.connect();
 
 require('dotenv').config();
 

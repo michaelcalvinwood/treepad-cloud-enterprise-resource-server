@@ -30,17 +30,19 @@ const sendToastMessage = (io, socket, message) => {
 }
 
 const subscribeToTree = async (io, socket, resourceId, token) => {
+    console.log(`subscribeToTree: ${resourceId}`);
     const sql = `SELECT branch_order FROM trees WHERE tree_id=${esc(resourceId)}`;
     let branchOrder;
     try {
         branchOrder = await db.pquery(sql);
-        debug.pretty(branchOrder);
+        debug.d(branchOrder, branchOrder);
         if (!branchOrder || !branchOrder.length) return sendToastMessage(io, socket, "Database Error 5001: Please try again later.");
     } catch (e) {
+        debug.d(e);
         return sendToastMessage(io, socket, "Database Error 5002: Please try again later.");
     }
-    console.log(`socket subscribeToTree join ${resourceId}`);
     socket.join(resourceId);
+    console.log('emit branchOrder', branchOrder[0].branch_order);
     io.to(socket.id).emit('branchOrder', branchOrder[0].branch_order);
 }
 
@@ -98,7 +100,7 @@ const authenticate = (resource, token, io, socket) => {
 
 exports.socketCommunication = (io, socket) => {
     socket.on('resourceSubscribe', (resourceId, token) => {
-        console.log(`Subscribe: ${resourceId} using token ${JSON.stringify(authenticateToken(token))}`);
+        console.log(`on resourceSubscribe: ${resourceId} using token ${JSON.stringify(authenticateToken(token))}`);
 
         const resource = getResourceParts(resourceId, io, socket);
         if (!resource) return;
@@ -126,9 +128,17 @@ exports.socketCommunication = (io, socket) => {
 
         if (!authenticate(resource, token, io, socket)) return;
 
-        // TODO emit to all ancestors as well
+        const sql = `UPDATE branches SET branch_name=${esc(branchName)} WHERE branch_id=${esc(branchId)}`;
 
-        console.log(`socket setBranchName emitting to ${treeId}`);
-        io.to(treeId).emit('branchName', branchId, branchName, socket.id);
+        db.pquery(sql)
+        .then(data => {
+            io.to(treeId).emit('branchName', branchId, branchName, socket.id);
+        })
+        .catch(err => {
+            console.log(err);
+            sendToastMessage(io, socket, 'Database Error: Please try again later.')
+        })
+
+        
     });
 }
