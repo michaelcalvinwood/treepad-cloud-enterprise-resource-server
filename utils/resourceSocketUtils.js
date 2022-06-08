@@ -12,6 +12,11 @@ const esc = val => {
     return server.dbPool.escape(val, true);
 }
 
+const sendToastMessage = (io, socket, message) => {
+    console.log(`Sending toast: ${message}`);
+    io.to(socket.id).emit('toastMessage', message);
+    
+}
 
 const authenticateToken = token => {
     if (!token) return false;
@@ -23,27 +28,35 @@ const authenticateToken = token => {
     return jwt.decode(token);
 }
 
-const sendToastMessage = (io, socket, message) => {
-    console.log(`Sending toast: ${message}`);
-    io.to(socket.id).emit('toastMessage', message);
-    
-}
-
 const subscribeToTree = async (io, socket, resourceId, token) => {
-    console.log(`subscribeToTree: ${resourceId}`);
+    let dbMessage = {
+        p: 'resourceSocketUtils.js subscribeToTree',
+        resourceId
+    }
+    io.to(socket.id).emit('debugEvent', 'subscribeToTree', dbMessage);
+
     const sql = `SELECT branch_order FROM trees WHERE tree_id=${esc(resourceId)}`;
     let branchOrder;
     try {
         branchOrder = await db.pquery(sql);
-        debug.d(branchOrder, branchOrder);
         if (!branchOrder || !branchOrder.length) return sendToastMessage(io, socket, "Database Error 5001: Please try again later.");
     } catch (e) {
         debug.d(e);
         return sendToastMessage(io, socket, "Database Error 5002: Please try again later.");
     }
     socket.join(resourceId);
-    console.log('emit branchOrder', branchOrder[0].branch_order);
-    io.to(socket.id).emit('branchOrder', branchOrder[0].branch_order);
+    const focus = null;
+
+    dbMessage = {
+       p : 'resourceSocketUtils.js subscribeToTree',
+       resourceId,
+       branchOrder: branchOrder[0].branch_order,
+       focus,
+       sender : socket.id
+    }
+    io.to(socket.id).emit('debugEvent', 'subscribeToTree', dbMessage);
+
+    io.to(socket.id).emit('branchOrder', resourceId, branchOrder[0].branch_order, focus, socket.id);
 }
 
 const subscribeToBranch = (io, socket, resourceId, token) => {
@@ -95,18 +108,113 @@ const authenticate = (resource, token, io, socket) => {
         return false;
     }
 
-    return true;
+    return resource;
+}
+
+const authenticateResource = (resource, token, io, socket, permissions) => {
+    const parts = getResourceParts(resource, io, socket);
+    if (!parts) return false;
+
+    return authenticate(parts, token, io, socket);
+
+}
+
+
+// const sql = `UPDATE branches SET branch_name=${esc(branchName)} WHERE branch_id=${esc(branchId)}`;
+    
+//     db.pquery(sql)
+//     .then(data => {
+//         io.to(treeId).emit('branchName', branchId, branchName, socket.id);
+//     })
+//     .catch(err => {
+//         console.log(err);
+//         sendToastMessage(io, socket, 'Database Error: Please try again later.')
+//     })
+
+const setBranchName = async (branchId, branchName, treeId, anscestors, io, socket) => {
+    const key = `${branchId}:branchName`;
+    const ts = Date.now();
+   
+    try {
+        db.redis.hSet(key, 'redisVal', branchName);
+        db.redis.hSet(key, 'accessed', ts);
+
+        // TODO: create function to broadcast to tree and ancestors
+        // TODO: update sql database intermittently in case of server failure. See above.
+
+        io.to(treeId).emit('branchName', branchId, branchName, socket.id);
+
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+const setBranchOrder = (branchOrder, newBranchId, treeId, ancestors, io, socket) => {
+    const key = `${treeId}:branchOrder`;
+    const ts = Date.now();
+
+    const fields = {
+        redisVal: JSON.stringify(branchOrder),
+        access: ts
+    }
+    db.redis.hSet(key, fields);
+
+    io.to(socket.id).emit('debugEvent', 'insertSibling', {
+        p: 'resourceSocketUtils.js setBranchOrder()',
+        treeId,
+        branchOrder,
+        newBranchId
+    })
+    const focus = newBranchId;
+    io.to(treeId).emit('branchOrder', treeId, JSON.stringify(branchOrder), focus, socket.id);
+}
+
+const getInitialBranchName = async (branchId, treeId, ancestors, io, socket) => {
+    const key = `${branchId}:branchName`;
+    const ts = Date.now();
+    let redisResult = null;
+
+    try {
+        const value = await db.redis.hGetAll(key);
+        if (value) {
+            console.log('redist result', value, typeof value);
+            db.redis.hSet(key, 'accessed', ts);
+            console.log(`${branchId}: ${value.redisVal}`);
+            io.to(socket.id).emit('getBranchName', branchId, value.redisVal, socket.id);
+        }
+        else {
+            const sql = `SELECT branch_name FROM branches WHERE branch_id = ${esc(branchId)}`;
+            console.log(sql);
+            const dbResult = await db.pquery(sql);
+            const branchName = dbResult[0].branch_name;
+           
+            const fields = {
+                accessed: ts,
+                redisVal: branchName,
+                mysqlVal: branchName,
+                state: 'active' // can change to middle value and then delete if no change since middle value
+            }
+            let test = await db.redis.hSet(key, fields);
+            // test = await db.redis.hGetAll(key);
+            // test = await db.redis.hGet(key, 'redisVal');
+            io.to(socket.id).emit('initialBranchName', branchId, branchName, socket.id);
+        }
+    } catch(e) {
+        console.error(e);
+    }
 }
 
 exports.socketCommunication = (io, socket) => {
     socket.on('resourceSubscribe', (resourceId, token) => {
-        console.log(`on resourceSubscribe: ${resourceId} using token ${JSON.stringify(authenticateToken(token))}`);
+        let dbMessage = {
+            p: 'resourceSocketUtils.js on resourceSubscribe',
+            resourceId
+        }
+        io.to(socket.id).emit('debugEvent', 'subscribeToTree', dbMessage);
 
-        const resource = getResourceParts(resourceId, io, socket);
+        const resource = authenticateResource(resourceId, token, io, socket);
         if (!resource) return;
 
-        if (!authenticate(resource, token, io, socket)) return;
-    
         switch(resource.type) {
             case 'T':
                 subscribeToTree(io, socket, resourceId, token);
@@ -122,23 +230,38 @@ exports.socketCommunication = (io, socket) => {
         }
     })
 
-    socket.on('setBranchName', (branchId, branchName, treeId, anscestors, token) => {
-        console.log('socket setBranchName', branchId, branchName);        const resource = getResourceParts(branchId, io, socket);
-        if (!resource) return;
-
-        if (!authenticate(resource, token, io, socket)) return;
-
-        const sql = `UPDATE branches SET branch_name=${esc(branchName)} WHERE branch_id=${esc(branchId)}`;
-
-        db.pquery(sql)
-        .then(data => {
-            io.to(treeId).emit('branchName', branchId, branchName, socket.id);
-        })
-        .catch(err => {
-            console.log(err);
-            sendToastMessage(io, socket, 'Database Error: Please try again later.')
-        })
-
-        
+    socket.on('setBranchName', (branchId, branchName, treeId, anscestors, token, permissions = null) => {
+        if (!authenticateResource(branchId, token, io, socket, permissions)) return;
+        setBranchName(branchId, branchName, treeId, anscestors, io, socket);
     });
+
+    socket.on('getBranchName', (branchId, treeId, ancestors, token, permissions = null) => {
+        if (!authenticateResource(branchId, token, io, socket, permissions)) return;
+        getBranchName(branchId, treeId, ancestors, io, socket);
+        console.log("on getBranchName");
+    })
+
+    socket.on('getInitialBranchName', (branchId, treeId, ancestors, token, permissions = null) => {
+        if (!authenticateResource(branchId, token, io, socket, permissions)) return;
+        let dbMessage = {
+            p: 'resourceSocketUtils.js on getInitialBranchName',
+            branchId,
+            treeId
+        }
+        io.to(socket.id).emit('debugEvent', 'subscribeToTree', dbMessage);
+        getInitialBranchName(branchId, treeId, ancestors, io, socket);
+        
+    })
+
+    socket.on('setBranchOrder', (branchOrder, newBranchId, treeId, ancestors, token, permissions = null) => {
+        if (!authenticateResource(treeId, token, io, socket, permissions)) return;
+        let dbMessage = {
+            p: 'resourceSocketUtils.js on setBranchOrder',
+            branchOrder,
+            treeId,
+            newBranchId
+        }
+        io.to(socket.id).emit('debugEvent', 'insertSibling', dbMessage);
+        setBranchOrder(branchOrder, newBranchId, treeId, ancestors, io, socket);
+    } ); 
 }

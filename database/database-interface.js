@@ -1,3 +1,4 @@
+require('dotenv').config();
 const tc = require('./table-creation.js');
 const mysql = require('mysql');
 const server = require('../server.js');
@@ -5,8 +6,36 @@ const bcrypt = require("bcrypt");
 const jwt = require('jsonwebtoken');
 const req = require('express/lib/request');
 const { v4: uuidv4 } = require('uuid');
+const redisPackage = require('redis');
 
-require('dotenv').config();
+const redisClient = redisPackage.createClient();
+
+exports.redis = redisClient;
+
+redisClient.on('connect', function() {
+
+ console.log('Redis Connected!');
+
+
+});
+
+redisClient.connect();
+
+
+exports.select = (redicConnection, mysqlPool, datatbase, fields, condition, expire = null) => {
+    return new Promise((resolve, reject) => {
+        // check to see if answer is in redis
+        // if yes, resolve the result
+
+        // if not, query mysql
+            // store result in redis
+            // resolve the result
+    });
+}
+
+const update = (redicConnection, mysqlPool, datatbase, fields, condition, expire = null) => {
+     
+}
 
 const pretty = str => JSON.stringify(str, null, 4);
 
@@ -65,7 +94,7 @@ exports.pquery = sql => {
 const insertTree = (userId, treeId, icon, treeName, treeDesc, userName, branchId, res) => {
     const ts = Date.now();
 
-    let sql = `INSERT INTO trees (user_id, tree_id, icon, tree_name, tree_desc, owner_name, branch_order, updated_ts) VALUES ('${Number(userId)}', '${treeId}', ${esc(icon)}, ${esc(treeName)}, ${esc(treeDesc)}, ${esc(userName)}, '["${branchId}_0o"]', '${ts}')`;
+    let sql = `INSERT INTO trees (user_id, tree_id, icon, tree_name, tree_desc, owner_name, branch_order, updated_ts) VALUES ('${Number(userId)}', '${treeId}', ${esc(icon)}, ${esc(treeName)}, ${esc(treeDesc)}, ${esc(userName)}, '["${branchId}_0"]', '${ts}')`;
 
     return new Promise((resolve, reject) => {
         server.dbPool.query(sql, (err, dbResult, fields) => {
