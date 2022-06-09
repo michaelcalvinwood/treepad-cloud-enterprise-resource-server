@@ -302,14 +302,31 @@ exports.socketCommunication = (io, socket) => {
 
     socket.on('setBranchOrder', (branchOrder, newBranchId, treeId, ancestors, token, permissions = null) => {
         if (!authenticateResource(treeId, token, io, socket, permissions)) return;
-        let dbMessage = {
+       
+        io.to(socket.id).emit('debugEvent', 'insertSibling', {
             p: 'resourceSocketUtils.js on setBranchOrder',
             branchOrder,
             treeId,
             newBranchId
-        }
-        io.to(socket.id).emit('debugEvent', 'insertSibling', dbMessage);
-        io.to(socket.id).emit('debugEvent', 'deleteBranch', dbMessage);
+        });
+        io.to(socket.id).emit('debugEvent', 'deleteBranch', {
+            p: 'resourceSocketUtils.js on setBranchOrder',
+            branchOrder,
+            treeId,
+            newBranchId
+        });
         setBranchOrder(branchOrder, newBranchId, treeId, ancestors, io, socket);
+    } );
+    
+    socket.on('getAllModules', () => {
+       db.pquery('SELECT module_name, icon FROM modules')
+       .then(data => {
+         io.to(socket.id).emit('getAllModules', data);
+       })
+       .catch(err => {
+        console.error(err);
+       })
+        
     } ); 
+
 }
