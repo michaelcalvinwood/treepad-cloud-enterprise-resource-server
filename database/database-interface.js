@@ -43,6 +43,24 @@ const esc = val => {
     return server.dbPool.escape(val, true);
 }
 
+exports.pquery = sql => {
+    return new Promise((resolve, reject) => {
+        server.dbPool.query(sql, (err, dbResult, fields) => {
+            if(err) reject(err);
+            else resolve(dbResult);
+        })
+    })
+}
+
+const poolQuery = sql => {
+    return new Promise((resolve, reject) => {
+        server.dbPool.query(sql, (err, dbResult, fields) => {
+            if(err) reject(err);
+            else resolve(dbResult);
+        })
+    })
+}
+
 exports.createTables = () => {
  
     server.dbPool.query(tc.createUpdatesTable, (err, res, fields) => {
@@ -58,6 +76,25 @@ exports.createTables = () => {
     server.dbPool.query(tc.createBranchesTable, (err, res, fields) => {
         if(err) console.error('Db error: ', err);
         else console.log('Created Table: branches');
+    });
+
+    server.dbPool.query(tc.createModulesTable, async (err, res, fields) => {
+        if(err) console.error('Db error: ', err);
+        else {
+            console.log('Created Table: modules');
+
+            await poolQuery('DELETE FROM modules');
+            await poolQuery(`INSERT INTO modules (module_name, icon) VALUES ('Quill', '/svg/quill.svg')`);
+            await poolQuery(`INSERT INTO modules (module_name, icon) VALUES ('Image Gallery', '/svg/image_gallery.svg')`);
+            await poolQuery(`INSERT INTO modules (module_name, icon) VALUES ('Video Gallery', '/svg/video-player.svg')`);
+            await poolQuery(`INSERT INTO modules (module_name, icon) VALUES ('Documents', '/svg/documents.svg')`);
+            await poolQuery(`INSERT INTO modules (module_name, icon) VALUES ('Assets', '/svg/assets.svg')`);
+            await poolQuery(`INSERT INTO modules (module_name, icon) VALUES ('Video Huddle', '/svg/video-huddle.svg')`);
+            await poolQuery(`INSERT INTO modules (module_name, icon) VALUES ('Video Conference', '/svg/video-conference.svg')`);
+            await poolQuery(`INSERT INTO modules (module_name, icon) VALUES ('Audio Huddle', '/svg/audio-huddle.svg')`);
+            await poolQuery(`INSERT INTO modules (module_name, icon) VALUES ('Audio Conference', '/svg/audio-conference.svg')`);
+            await poolQuery(`INSERT INTO modules (module_name, icon) VALUES ('Thread Chat', '/svg/thread-chat.svg')`);
+        }
     });
 }
 
@@ -82,14 +119,7 @@ exports.getTrees = (req, res) => {
     });
 }
 
-exports.pquery = sql => {
-    return new Promise((resolve, reject) => {
-        server.dbPool.query(sql, (err, dbResult, fields) => {
-            if(err) reject(err);
-            else resolve(dbResult);
-        })
-    })
-}
+
 
 const insertTree = (userId, treeId, icon, treeName, treeDesc, userName, branchId, res) => {
     const ts = Date.now();
