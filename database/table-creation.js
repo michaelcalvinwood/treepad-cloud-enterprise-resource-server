@@ -28,7 +28,7 @@ exports.createBranchesTable = `CREATE TABLE IF NOT EXISTS branches (
     tree_id VARCHAR(128) NOT NULL,
     immutable_parent_id VARCHAR(128) NOT NULL DEFAULT '',
     branch_name VARCHAR(1024) NOT NULL DEFAULT '',
-    default_module VARCHAR(128) NOT NULL DEFAULT '',
+    default_module BIGINT(12) NOT NULL DEFAULT 0,
     active_modules text NOT NULL DEFAULT '[]',
     updated_ts BIGINT NOT NULL DEFAULT 0,
     PRIMARY KEY(branch_id),
@@ -36,7 +36,8 @@ exports.createBranchesTable = `CREATE TABLE IF NOT EXISTS branches (
 )`;
 
 exports.createModulesTable = `CREATE TABLE IF NOT EXISTS modules (
+    module_id BIGINT(12) PRIMARY KEY,
     module_name VARCHAR(128) NOT NULL,
     icon VARCHAR(512) NOT NULL,
-    PRIMARY KEY(module_name)
+    UNIQUE(module_name)
 )`;

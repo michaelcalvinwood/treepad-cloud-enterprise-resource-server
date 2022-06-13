@@ -84,16 +84,17 @@ exports.createTables = () => {
             console.log('Created Table: modules');
 
             await poolQuery('DELETE FROM modules');
-            await poolQuery(`INSERT INTO modules (module_name, icon) VALUES ('Quill', '/svg/quill.svg')`);
-            await poolQuery(`INSERT INTO modules (module_name, icon) VALUES ('Image Gallery', '/svg/image_gallery.svg')`);
-            await poolQuery(`INSERT INTO modules (module_name, icon) VALUES ('Video Gallery', '/svg/video-player.svg')`);
-            await poolQuery(`INSERT INTO modules (module_name, icon) VALUES ('Documents', '/svg/documents.svg')`);
-            await poolQuery(`INSERT INTO modules (module_name, icon) VALUES ('Assets', '/svg/assets.svg')`);
-            await poolQuery(`INSERT INTO modules (module_name, icon) VALUES ('Video Huddle', '/svg/video-huddle.svg')`);
-            await poolQuery(`INSERT INTO modules (module_name, icon) VALUES ('Video Conference', '/svg/video-conference.svg')`);
-            await poolQuery(`INSERT INTO modules (module_name, icon) VALUES ('Audio Huddle', '/svg/audio-huddle.svg')`);
-            await poolQuery(`INSERT INTO modules (module_name, icon) VALUES ('Audio Conference', '/svg/audio-conference.svg')`);
-            await poolQuery(`INSERT INTO modules (module_name, icon) VALUES ('Thread Chat', '/svg/thread-chat.svg')`);
+            await poolQuery('ALTER TABLE modules AUTO_INCREMENT = 1');
+            await poolQuery(`INSERT INTO modules (module_id, module_name, icon) VALUES (1, 'Quill', '/svg/quill.svg')`);
+            await poolQuery(`INSERT INTO modules (module_id, module_name, icon) VALUES (2, 'Image Gallery', '/svg/image_gallery.svg')`);
+            await poolQuery(`INSERT INTO modules (module_id, module_name, icon) VALUES (3, 'Video Gallery', '/svg/video-player.svg')`);
+            await poolQuery(`INSERT INTO modules (module_id, module_name, icon) VALUES (4, 'Documents', '/svg/documents.svg')`);
+            await poolQuery(`INSERT INTO modules (module_id, module_name, icon) VALUES (5, 'Assets', '/svg/assets.svg')`);
+            await poolQuery(`INSERT INTO modules (module_id, module_name, icon) VALUES (6, 'Video Huddle', '/svg/video-huddle.svg')`);
+            await poolQuery(`INSERT INTO modules (module_id, module_name, icon) VALUES (7, 'Video Conference', '/svg/video-conference.svg')`);
+            await poolQuery(`INSERT INTO modules (module_id, module_name, icon) VALUES (8, 'Audio Huddle', '/svg/audio-huddle.svg')`);
+            await poolQuery(`INSERT INTO modules (module_id, module_name, icon) VALUES (9, 'Audio Conference', '/svg/audio-conference.svg')`);
+            await poolQuery(`INSERT INTO modules (module_id, module_name, icon) VALUES (10, 'Thread Chat', '/svg/thread-chat.svg')`);
         }
     });
 }
