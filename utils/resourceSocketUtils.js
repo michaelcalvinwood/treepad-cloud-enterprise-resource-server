@@ -1,7 +1,8 @@
 const jwt = require('jsonwebtoken');
 const debug = require('../utils/debugUtils');
 const db = require('../database/database-interface');
-const server = require('../server.js');
+const server = require('../resourceServer.js');
+const monitor = require('./eventMonitor');
 
 const fn = 'resourceSocketUtils.js ';
 
@@ -31,27 +32,28 @@ const authenticateToken = token => {
 }
 
 const subscribeToTree = async (io, socket, resourceId, token) => {
+    const p = 'resourceServer|resourceSocketUtils.js|subscribeToTree';
+    monitor.events(io, socket, ['clickLoginSubmit'], {p, resourceId});
+
     socket.join(resourceId);
 
-    let dbMessage = {
-        p: 'resourceSocketUtils.js subscribeToTree',
-        resourceId
-    }
-    io.to(socket.id).emit('debugEvent', 'subscribeToTree', dbMessage);
 
     const key = `${resourceId}:branchOrder`;
     const ts = Date.now();
     const focus = null;
 
     const redisVal = await db.redis.hGet(key, 'redisVal');
-    io.to(socket.id).emit('debugEvent', 'subscribeToTree', {key, redisVal});
 
-    if (Object.keys(redisVal).length) {
+    monitor.events(io, socket, ['clickLoginSubmit'], {p, key, ts, focus, redisVal})
+
+    if (redisVal && Object.keys(redisVal).length) {
         return io.to(socket.id).emit('branchOrder', resourceId, redisVal, focus, socket.id);
     }
 
-
     const sql = `SELECT branch_order FROM trees WHERE tree_id=${esc(resourceId)}`;
+
+    monitor.events(io, socket, ['clickLoginSubmit'], {p, sql});
+
     let branchOrder;
     try {
         branchOrder = await db.pquery(sql);
@@ -60,17 +62,15 @@ const subscribeToTree = async (io, socket, resourceId, token) => {
         debug.d(e);
         return sendToastMessage(io, socket, "Database Error 5002: Please try again later.");
     }
-    
-    dbMessage = {
-       p : 'resourceSocketUtils.js subscribeToTree',
-       resourceId,
-       branchOrder: branchOrder[0].branch_order,
-       focus,
-       sender : socket.id
-    }
-    io.to(socket.id).emit('debugEvent', 'subscribeToTree', dbMessage);
 
-    io.to(socket.id).emit('branchOrder', resourceId, branchOrder[0].branch_order, focus, socket.id);
+    const branchOrderResult = branchOrder[0].branch_order;
+    const sender = socket.id;
+ 
+    monitor.events(io, socket, ['clickLoginSubmit'], {p, resourceId, branchOrderResult, focus, sender});
+
+    monitor.events(io, socket, ['clickLoginSubmit'], {p, emit: 'branchOrder'});
+    
+    io.to(socket.id).emit('branchOrder', resourceId, branchOrderResult, focus, sender);
 }
 
 const subscribeToBranch = (io, socket, resourceId, token) => {

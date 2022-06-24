@@ -1,12 +1,18 @@
+
 require('dotenv').config();
 const tc = require('./table-creation.js');
 const mysql = require('mysql');
-const server = require('../server.js');
+const server = require('../resourceServer.js');
 const bcrypt = require("bcrypt");
 const jwt = require('jsonwebtoken');
 const req = require('express/lib/request');
+
 const { v4: uuidv4 } = require('uuid');
+
+
 const redisPackage = require('redis');
+
+
 
 const redisClient = redisPackage.createClient();
 
@@ -18,6 +24,7 @@ redisClient.on('connect', function() {
 
 
 });
+
 
 redisClient.connect();
 
@@ -373,3 +380,5 @@ exports.deleteTree = ((req, res) => {
 
     
 });
+
+console.log('loaded database-interface.js');
