@@ -39,5 +39,8 @@ exports.createModulesTable = `CREATE TABLE IF NOT EXISTS modules (
     module_id BIGINT(12) PRIMARY KEY,
     module_name VARCHAR(128) NOT NULL,
     icon VARCHAR(512) NOT NULL,
+    server VARCHAR(512) NOT NULL DEFAULT '',
+    port INT(8) NOT NULL DEFAULT 0,
+    url VARCHAR(512) NOT NULL DEFAULT '',
     UNIQUE(module_name)
 )`;

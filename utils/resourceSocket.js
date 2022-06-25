@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const debug = require('../utils/debugUtils');
+const debug = require('./debugUtils');
 const db = require('../database/database-interface');
 const server = require('../resourceServer.js');
 const monitor = require('./eventMonitor');
@@ -319,8 +319,11 @@ exports.socketCommunication = (io, socket) => {
     } );
     
     socket.on('getAllModules', () => {
-       db.pquery('SELECT module_name, icon FROM modules')
+       monitor.events(io, socket, ['displayModules', 'on'], {on: 'resourceServer|getAllModules'});
+
+       db.pquery('SELECT module_id, module_name, icon, server, port, url FROM modules')
        .then(data => {
+        monitor.events(io, socket, ['displayModules', 'emit'], {emit: 'resourceServer|getAllModules', data});
          io.to(socket.id).emit('getAllModules', data);
        })
        .catch(err => {
@@ -329,4 +332,37 @@ exports.socketCommunication = (io, socket) => {
         
     } ); 
 
+    socket.on('branchCurModule', async (branchId, moduleId) => {
+        monitor.events(io, socket, ['on'], {on: 'resourceServer|branchCurModule', branchId, moduleId});
+
+        try {
+            let sql = `UPDATE branches SET default_module=${moduleId} WHERE branch_id=${esc(branchId)}`;
+            let updateResult = await db.pquery(sql);
+            
+            let key = `${branchId}:curModule`;
+            await db.redis.set(key, moduleId);
+
+            sql = `SELECT active_modules FROM branches WHERE branch_id=${esc(branchId)}`;
+            const selectResult = await db.pquery(sql);
+            const activeModules = JSON.parse(selectResult[0].active_modules);
+
+            const curModule = activeModules.find(m => m === moduleId);
+
+            if (!curModule) {
+                activeModules.push(moduleId);
+                sql = `UPDATE branches SET active_modules=${esc(JSON.stringify(activeModules))} WHERE branch_id=${esc(branchId)}`;
+                updateResult = await db.pquery(sql);
+            }
+
+            key = `${branchId}:activeModules`;
+            await db.redis.set(key, JSON.stringify(activeModules));
+
+            monitor.events(io, socket, ['emit'], {emit: 'resourceServer|branchCurModule', branchId, moduleId});
+            io.to(socket.id).emit('branchCurModule', branchId, moduleId);
+
+        } catch (e) {
+            monitor.events(io, socket, ['on'], {on: 'resourceServer|branchCurModule', error: e});
+        }
+    
+    })
 }

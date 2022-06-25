@@ -8,7 +8,7 @@ const db = require('./database/database-interface.js');
 const routes = require('./routes/routes.js');
 const jwt = require('jsonwebtoken');
 const socketio = require('socket.io');
-const sockUtils = require('./utils/resourceSocketUtils');
+const sockUtils = require('./utils/resourceSocket');
 
 require('dotenv').config();
 
@@ -56,6 +56,9 @@ app.use(cors());
 
 app.use((req, res, next) => {
   console.log(req.url);
+
+  if (req.url.startsWith('/svg')) return next();
+
   const token = getToken(req);
 
   if (!token) return res.status(403).json({ error: "No token. Unauthorized." });
