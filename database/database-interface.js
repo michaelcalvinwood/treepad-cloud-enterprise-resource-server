@@ -12,16 +12,16 @@ const { v4: uuidv4 } = require('uuid');
 
 const redisPackage = require('redis');
 
-
-
 const redisClient = redisPackage.createClient();
 
 exports.redis = redisClient;
 
 redisClient.on('connect', function() {
+    console.log('Redis Connected!');
 
- console.log('Redis Connected!');
+    redisClient.flushAll();
 
+    console.log('Redis Databases All Flushed');
 
 });
 

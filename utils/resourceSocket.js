@@ -146,21 +146,14 @@ const authenticateResource = (resource, token, io, socket, permissions) => {
 //     })
 
 const setBranchName = async (branchId, branchName, treeId, anscestors, io, socket) => {
-    const p = fn + 'setBranchName'
-    const key = `${branchId}:branchName`;
     const ts = Date.now();
-   
+    
     try {
-        db.redis.hSet(key, 'redisVal', branchName);
-        db.redis.hSet(key, 'accessed', ts);
+        const key = `${branchId}:branchName`;
+        await db.redis.set(key, branchName);    
+        let sql = `UPDATE branches SET branch_name=${esc(branchName)} WHERE branch_id=${esc(branchId)}`;
+        await db.pquery(sql);
 
-        // TODO: create function to broadcast to tree and ancestors
-        // TODO: update sql database intermittently in case of server failure. See above.
-
-        let dbMessage = {
-            p, branchId, treeId
-        }
-        io.to(socket.id).emit('debugEvent', 'branchNameChange', dbMessage);
         io.to(treeId).emit('setBranchName', branchId, branchName, socket.id);
 
     } catch (e) {
@@ -195,50 +188,50 @@ const setBranchOrder = (branchOrder, newBranchId, treeId, ancestors, io, socket)
     io.to(treeId).emit('branchOrder', treeId, JSON.stringify(branchOrder), focus, socket.id);
 }
 
-const getInitialBranchName = async (branchId, treeId, ancestors, io, socket) => {
-    const key = `${branchId}:branchName`;
-    const ts = Date.now();
-    let redisResult = null;
-    const p = 'resourceSocketUtils.js getInitialBranchName';
-
-    let dbMessage = {
-        p,
-        branchId,
-        treeId
-    }
-    io.to(socket.id).emit('debugEvent', 'subscribeToTree', dbMessage);
+const getBranchInfo = async (branchId, treeId, ancestors, io, socket) => {
+    let key = '';
+    let branchName = '';
+    let modules = [];
+    let defaultModule = -1;
+    let sql, dbResult, redisResult;
 
     try {
-        const value = await db.redis.hGetAll(key);
-        if (value) {
-            dbMessage = {
-                redisResult: value
-            }
-            io.to(socket.id).emit('debugEvent', 'subscribeToTree', dbMessage);
-
-            db.redis.hSet(key, 'accessed', ts);
-            io.to(socket.id).emit('getInitialBranchName', branchId, value.redisVal, socket.id);
+        // get branchName
+        key = `${branchId}:branchName`;
+        branchName = await db.redis.get(key);
+        if (!branchName) {
+            sql = `SELECT branch_name FROM branches WHERE branch_id = ${esc(branchId)}`;
+            dbResult = await db.pquery(sql);
+            branchName = dbResult[0].branch_name;
+            await db.redis.set(key, branchName);
         }
+        
+        // get branch modules
+        key = `${branchId}:modules`;
+        redisResult = await db.redis.get(key);
+        if (redisResult) modules = JSON.parse(redisResult);
         else {
-            const sql = `SELECT branch_name FROM branches WHERE branch_id = ${esc(branchId)}`;
-            
-            io.to(socket.id).emit('debugEvent', 'subscribeToTree', sql);
-
-            const dbResult = await db.pquery(sql);
-            const branchName = dbResult[0].branch_name;
-           
-            const fields = {
-                accessed: ts,
-                redisVal: branchName,
-                mysqlVal: branchName,
-                state: 'active' // can change to middle value and then delete if no change since middle value
-            }
-            let test = db.redis.hSet(key, fields);
-    
-            io.to(socket.id).emit('getInitialBranchName', branchId, branchName, socket.id);
+            sql = `SELECT active_modules FROM branches WHERE branch_id = ${esc(branchId)}`;
+            dbResult = await db.pquery(sql);
+            await db.redis.set(key, dbResult[0].active_modules);
+            modules = JSON.parse(dbResult[0].active_modules);
         }
+
+        // get branch default module
+        key = `${branchId}:defaultModule`;
+        defaultModule = key;
+        if (!defaultModule) {
+            sql = `SELECT default_module FROM branches WHERE branch_id = ${esc(branchId)}`;
+            dbResult = await db.pquery(sql);
+            await db.redis.set(key, dbResult[0].default_module);
+            defaultModule = dbResult[0].default_module;
+        }
+
+        monitor.events(io, socket, ['emit'], {emit: 'resourceServer|getBranchInfo', branchId, branchName, modules, defaultModule});
+        
+        io.to(socket.id).emit('getBranchInfo', branchId, branchName, modules, defaultModule);
     } catch(e) {
-        console.error(e);
+        monitor.events(io, socket, ['emit'], {emit: 'resourceServer|getBranchInfo', error: e});
     }
 }
 
@@ -268,18 +261,11 @@ exports.socketCommunication = (io, socket) => {
         }
     })
 
-    socket.on('setBranchName', (branchId, branchName, treeId, anscestors, token, permissions = null) => {
+    socket.on('setBranchName', (branchId, branchName, treeId, ancestors, token, permissions = null) => {
+        monitor.events(io, socket, ['on'], {on: 'resourceServer|setBranchName', branchId, branchName, treeId, ancestors, token, permissions});
         if (!authenticateResource(branchId, token, io, socket, permissions)) return;
         
-        let dbMessage = {
-            p: 'resourceSocketUtils.js on setBranchName',
-            branchId,
-            branchName,
-            treeId
-        }
-        io.to(socket.id).emit('debugEvent', 'branchNameChange', dbMessage);
-
-        setBranchName(branchId, branchName, treeId, anscestors, io, socket);
+        setBranchName(branchId, branchName, treeId, ancestors, io, socket);
     });
 
     socket.on('getBranchName', (branchId, treeId, ancestors, token, permissions = null) => {
@@ -288,16 +274,12 @@ exports.socketCommunication = (io, socket) => {
         console.log("on getBranchName");
     })
 
-    socket.on('getInitialBranchName', (branchId, treeId, ancestors, token, permissions = null) => {
+    socket.on('getBranchInfo', (branchId, treeId, ancestors, token, permissions = null) => {
+        monitor.events(io, socket, ['on'], {on: 'resourceServer|getBranchInfo', branchId, treeId, ancestors, token, permissions});
+
         if (!authenticateResource(branchId, token, io, socket, permissions)) return;
-        let dbMessage = {
-            p: 'resourceSocketUtils.js on getInitialBranchName',
-            branchId,
-            treeId
-        }
-        io.to(socket.id).emit('debugEvent', 'subscribeToTree', dbMessage);
-        getInitialBranchName(branchId, treeId, ancestors, io, socket);
-        
+       
+        getBranchInfo(branchId, treeId, ancestors, io, socket); 
     })
 
     socket.on('setBranchOrder', (branchOrder, newBranchId, treeId, ancestors, token, permissions = null) => {
