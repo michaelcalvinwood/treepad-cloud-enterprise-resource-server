@@ -145,32 +145,17 @@ const authenticateResource = (resource, token, io, socket, permissions) => {
 //         sendToastMessage(io, socket, 'Database Error: Please try again later.')
 //     })
 
-const setBranchName = async (branchId, branchName, treeId, anscestors, io, socket) => {
-    const ts = Date.now();
-    
-    try {
-        const key = `${branchId}:branchName`;
-        await db.redis.set(key, branchName);    
-        let sql = `UPDATE branches SET branch_name=${esc(branchName)} WHERE branch_id=${esc(branchId)}`;
-        await db.pquery(sql);
-
-        io.to(treeId).emit('setBranchName', branchId, branchName, socket.id);
-
-    } catch (e) {
-        console.error(e);
-    }
-}
 
 const setBranchOrder = (branchOrder, newBranchId, treeId, ancestors, io, socket) => {
     const key = `${treeId}:branchOrder`;
     const ts = Date.now();
-
+    
     const fields = {
         redisVal: JSON.stringify(branchOrder),
         access: ts,
     }
     db.redis.hSet(key, fields);
-
+    
     let dbMessage =  {
         p: 'resourceSocketUtils.js setBranchOrder()',
         treeId,
@@ -180,7 +165,7 @@ const setBranchOrder = (branchOrder, newBranchId, treeId, ancestors, io, socket)
         fields,
         emit: 'branchOrder'
     };
-
+    
     io.to(socket.id).emit('debugEvent', 'insertSibling', dbMessage);
     io.to(socket.id).emit('debugEvent', 'deleteBranch', dbMessage);
     
@@ -194,15 +179,17 @@ const getBranchInfo = async (branchId, treeId, ancestors, io, socket) => {
     let modules = [];
     let defaultModule = -1;
     let sql, dbResult, redisResult;
-
+    
     try {
         // get branchName
         key = `${branchId}:branchName`;
         branchName = await db.redis.get(key);
+        monitor.events(io, socket, ['on'], {on: 'resourceServer|getBranchInfo', branchName, m: 'branchName from redis'});
         if (!branchName) {
             sql = `SELECT branch_name FROM branches WHERE branch_id = ${esc(branchId)}`;
             dbResult = await db.pquery(sql);
             branchName = dbResult[0].branch_name;
+            monitor.events(io, socket, ['on'], {on: 'resourceServer|getBranchInfo', branchName, m: 'branchName from mysql', sql});
             await db.redis.set(key, branchName);
         }
         
@@ -216,7 +203,7 @@ const getBranchInfo = async (branchId, treeId, ancestors, io, socket) => {
             await db.redis.set(key, dbResult[0].active_modules);
             modules = JSON.parse(dbResult[0].active_modules);
         }
-
+        
         // get branch default module
         key = `${branchId}:defaultModule`;
         defaultModule = key;
@@ -226,7 +213,7 @@ const getBranchInfo = async (branchId, treeId, ancestors, io, socket) => {
             await db.redis.set(key, dbResult[0].default_module);
             defaultModule = dbResult[0].default_module;
         }
-
+        
         monitor.events(io, socket, ['emit'], {emit: 'resourceServer|getBranchInfo', branchId, branchName, modules, defaultModule});
         
         io.to(socket.id).emit('getBranchInfo', branchId, branchName, modules, defaultModule);
@@ -242,109 +229,115 @@ exports.socketCommunication = (io, socket) => {
             resourceId
         }
         io.to(socket.id).emit('debugEvent', 'subscribeToTree', dbMessage);
-
+        
         const resource = authenticateResource(resourceId, token, io, socket);
         if (!resource) return;
-
+        
         switch(resource.type) {
             case 'T':
                 subscribeToTree(io, socket, resourceId, token);
                 break;
-            case 'B':
-                subscribeToBranch(io, socket, resourceId, token);
-                break;
-            case 'L':
-                subscribeToLeaf(io, socket, resourceId, token);
-                break;
-            default:
-                sendToastMessage(io, socket, `Unknown resource type: ${resourceId})`);
-        }
-    })
-
-    socket.on('setBranchName', (branchId, branchName, treeId, ancestors, token, permissions = null) => {
-        monitor.events(io, socket, ['on'], {on: 'resourceServer|setBranchName', branchId, branchName, treeId, ancestors, token, permissions});
-        if (!authenticateResource(branchId, token, io, socket, permissions)) return;
-        
-        setBranchName(branchId, branchName, treeId, ancestors, io, socket);
-    });
-
-    socket.on('getBranchName', (branchId, treeId, ancestors, token, permissions = null) => {
-        if (!authenticateResource(branchId, token, io, socket, permissions)) return;
-        getBranchName(branchId, treeId, ancestors, io, socket);
-        console.log("on getBranchName");
-    })
-
-    socket.on('getBranchInfo', (branchId, treeId, ancestors, token, permissions = null) => {
-        monitor.events(io, socket, ['on'], {on: 'resourceServer|getBranchInfo', branchId, treeId, ancestors, token, permissions});
-
-        if (!authenticateResource(branchId, token, io, socket, permissions)) return;
-       
-        getBranchInfo(branchId, treeId, ancestors, io, socket); 
-    })
-
-    socket.on('setBranchOrder', (branchOrder, newBranchId, treeId, ancestors, token, permissions = null) => {
-        if (!authenticateResource(treeId, token, io, socket, permissions)) return;
-       
-        io.to(socket.id).emit('debugEvent', 'insertSibling', {
-            p: 'resourceSocketUtils.js on setBranchOrder',
-            branchOrder,
-            treeId,
-            newBranchId
-        });
-        io.to(socket.id).emit('debugEvent', 'deleteBranch', {
-            p: 'resourceSocketUtils.js on setBranchOrder',
-            branchOrder,
-            treeId,
-            newBranchId
-        });
-        setBranchOrder(branchOrder, newBranchId, treeId, ancestors, io, socket);
-    } );
-    
-    socket.on('getAllModules', () => {
-       monitor.events(io, socket, ['displayModules', 'on'], {on: 'resourceServer|getAllModules'});
-
-       db.pquery('SELECT module_id, module_name, icon, server, port, url FROM modules')
-       .then(data => {
-        monitor.events(io, socket, ['displayModules', 'emit'], {emit: 'resourceServer|getAllModules', data});
-         io.to(socket.id).emit('getAllModules', data);
-       })
-       .catch(err => {
-        console.error(err);
-       })
-        
-    } ); 
-
-    socket.on('branchCurModule', async (branchId, moduleId) => {
-        monitor.events(io, socket, ['on'], {on: 'resourceServer|branchCurModule', branchId, moduleId});
-
-        try {
-            let sql = `UPDATE branches SET default_module=${moduleId} WHERE branch_id=${esc(branchId)}`;
-            let updateResult = await db.pquery(sql);
-            
-            let key = `${branchId}:curModule`;
-            await db.redis.set(key, moduleId);
-
-            sql = `SELECT active_modules FROM branches WHERE branch_id=${esc(branchId)}`;
-            const selectResult = await db.pquery(sql);
-            const activeModules = JSON.parse(selectResult[0].active_modules);
-
-            const curModule = activeModules.find(m => m === moduleId);
-
-            if (!curModule) {
-                activeModules.push(moduleId);
-                sql = `UPDATE branches SET active_modules=${esc(JSON.stringify(activeModules))} WHERE branch_id=${esc(branchId)}`;
-                updateResult = await db.pquery(sql);
-            }
-
-            key = `${branchId}:activeModules`;
-            await db.redis.set(key, JSON.stringify(activeModules));
-
-            monitor.events(io, socket, ['emit'], {emit: 'resourceServer|branchCurModule', branchId, moduleId});
-            io.to(socket.id).emit('branchCurModule', branchId, moduleId);
-
-        } catch (e) {
-            monitor.events(io, socket, ['on'], {on: 'resourceServer|branchCurModule', error: e});
-        }
-    
-    })
-}
+                case 'B':
+                    subscribeToBranch(io, socket, resourceId, token);
+                    break;
+                    case 'L':
+                        subscribeToLeaf(io, socket, resourceId, token);
+                        break;
+                        default:
+                            sendToastMessage(io, socket, `Unknown resource type: ${resourceId})`);
+                        }
+                    })
+                    
+                    socket.on('setBranchName', async (branchId, branchName, treeId, ancestors, token, permissions = null) => {
+                        monitor.events(io, socket, ['on'], {on: 'resourceServer|setBranchName', branchId, branchName, treeId, ancestors, token, permissions});
+                        if (!authenticateResource(branchId, token, io, socket, permissions)) return; 
+                        try {
+                            const key = `${branchId}:branchName`;
+                            await db.redis.set(key, branchName);
+                            await db.redis.rPush('rcache', key);
+                            // let sql = `UPDATE branches SET branch_name=${esc(branchName)} WHERE branch_id=${esc(branchId)}`;
+                            // await db.pquery(sql);
+                    
+                            io.to(treeId).emit('setBranchName', branchId, branchName, socket.id);
+                    
+                        } catch (e) {
+                            console.error(e);
+                        }
+                       
+                    });
+                    
+                    socket.on('getBranchInfo', (branchId, treeId, ancestors, token, permissions = null) => {
+                        monitor.events(io, socket, ['on'], {on: 'resourceServer|getBranchInfo', branchId, treeId, ancestors, token, permissions});
+                        
+                        if (!authenticateResource(branchId, token, io, socket, permissions)) return;
+                        
+                        getBranchInfo(branchId, treeId, ancestors, io, socket); 
+                    })
+                    
+                    socket.on('setBranchOrder', (branchOrder, newBranchId, treeId, ancestors, token, permissions = null) => {
+                        if (!authenticateResource(treeId, token, io, socket, permissions)) return;
+                        
+                        io.to(socket.id).emit('debugEvent', 'insertSibling', {
+                            p: 'resourceSocketUtils.js on setBranchOrder',
+                            branchOrder,
+                            treeId,
+                            newBranchId
+                        });
+                        io.to(socket.id).emit('debugEvent', 'deleteBranch', {
+                            p: 'resourceSocketUtils.js on setBranchOrder',
+                            branchOrder,
+                            treeId,
+                            newBranchId
+                        });
+                        setBranchOrder(branchOrder, newBranchId, treeId, ancestors, io, socket);
+                    } );
+                    
+                    socket.on('getAllModules', () => {
+                        monitor.events(io, socket, ['displayModules', 'on'], {on: 'resourceServer|getAllModules'});
+                        
+                        db.pquery('SELECT module_id, module_name, icon, server, port, url FROM modules')
+                        .then(data => {
+                            monitor.events(io, socket, ['displayModules', 'emit'], {emit: 'resourceServer|getAllModules', data});
+                            io.to(socket.id).emit('getAllModules', data);
+                        })
+                        .catch(err => {
+                            console.error(err);
+                        })
+                        
+                    } ); 
+                    
+                    socket.on('branchCurModule', async (branchId, moduleId) => {
+                        monitor.events(io, socket, ['on'], {on: 'resourceServer|branchCurModule', branchId, moduleId});
+                        
+                        try {
+                            let sql = `UPDATE branches SET default_module=${moduleId} WHERE branch_id=${esc(branchId)}`;
+                            let updateResult = await db.pquery(sql);
+                            
+                            let key = `${branchId}:curModule`;
+                            await db.redis.set(key, moduleId);
+                            
+                            sql = `SELECT active_modules FROM branches WHERE branch_id=${esc(branchId)}`;
+                            const selectResult = await db.pquery(sql);
+                            const activeModules = JSON.parse(selectResult[0].active_modules);
+                            
+                            const curModule = activeModules.find(m => m === moduleId);
+                            
+                            if (!curModule) {
+                                activeModules.push(moduleId);
+                                sql = `UPDATE branches SET active_modules=${esc(JSON.stringify(activeModules))} WHERE branch_id=${esc(branchId)}`;
+                                updateResult = await db.pquery(sql);
+                            }
+                            
+                            key = `${branchId}:activeModules`;
+                            await db.redis.set(key, JSON.stringify(activeModules));
+                            
+                            monitor.events(io, socket, ['emit'], {emit: 'resourceServer|branchCurModule', branchId, moduleId});
+                            io.to(socket.id).emit('branchCurModule', branchId, moduleId);
+                            
+                        } catch (e) {
+                            monitor.events(io, socket, ['on'], {on: 'resourceServer|branchCurModule', error: e});
+                        }
+                        
+                    })
+                }
+                

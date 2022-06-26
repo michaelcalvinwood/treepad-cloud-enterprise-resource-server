@@ -40,9 +40,11 @@ const dbPoolInfo = {
   password: process.env.DB_PASSWORD,
   database: process.env.DB_DATABASE,
   connectionLimit: Number(process.env.DB_CONNECTION_LIMIT),
-  queueLimit: Number(process.env.DB_QUEUE_LIMIT),
+  queueLimit: Number(process.env.DB_QUEUE_LIMIT) - 5,
   charset: 'utf8'
 }
+
+console.log('dbPoolInfo', dbPoolInfo);
 
 exports.dbPool = mysql.createPool(dbPoolInfo);
 db.createTables();
